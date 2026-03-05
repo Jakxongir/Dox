@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Панель управления</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #222; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+        #screen { border: 2px solid #555; cursor: crosshair; background-color: #000; }
+    </style>
+</head>
+<body>
+    <canvas id="screen"></canvas>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('screen');
+        const ctx = canvas.getContext('2d');
+
+        // --- Функция для получения и отображения данных пользователя ---
+        function fetchAndDisplayUserData() {
+            fetch('https://ipapi.co/json/')
+                .then(response => response.json())
+                .then(userData => {
+                    // 1. Отправляем данные на сервер, чтобы они появились в терминале
+                    socket.emit('user-data-to-server', userData);
+
+                    // 2. Отображаем данные на самой странице
+                    const ip = userData.ip;
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    const deviceType = isMobile ? 'Мобильное' : 'ПК/Ноутбук';
+                    const carrier = userData.org || 'Неизвестно';
+
+                    let infoDiv = document.getElementById('user-info');
+                    if (!infoDiv) {
+                        infoDiv = document.createElement('div');
+                        infoDiv.id = 'user-info';
+                        infoDiv.style.position = 'absolute';
+                        infoDiv.style.top = '10px';
+                        infoDiv.style.left = '10px';
+                        infoDiv.style.color = '#00ff00';
+                        infoDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+                        infoDiv.style.padding = '10px 15px';
+                        infoDiv.style.borderRadius = '5px';
+                        infoDiv.style.fontFamily = 'monospace';
+                        infoDiv.style.fontSize = '14px';
+                        infoDiv.style.zIndex = '1000';
+                        infoDiv.style.lineHeight = '1.5';
+                        document.body.appendChild(infoDiv);
+                    }
+
+                    infoDiv.innerHTML = `
+                        <strong>Данные пользователя:</strong><br>
+                        IP: ${ip}<br>
+                        Город: ${userData.city || 'Неизвестно'}<br>
+                        Регион: ${userData.region || 'Неизвестно'}<br>
+                        Страна: ${userData.country_name || 'Неизвестно'}<br>
+                        Провайдер: ${carrier}<br>
+                        Устройство: ${deviceType}
+                    `;
+                })
+                .catch(error => {
+                    console.error('Не удалось получить данные о пользователе:', error);
+                });
+        }
+
+        // Вызываем функцию при загрузке страницы
+        fetchAndDisplayUserData();
+
+
+        // --- Остальной код для управления экраном (остается без изменений) ---
+        socket.on('screen-update', (data) => {
+            const img = new Image();
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+            };
+            img.src = 'data:image/png;base64,' + data;
+        });
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            console.log(`Клик на координаты: x=${x}, y=${y}`);
+            socket.emit('command', `click ${x} ${y}`);
+        });
+
+        socket.on('connect', () => {
+            console.log('Подключено к серверу');
+            socket.emit('command', 'screenshot');
+        });
+    </script>
+</body>
+</html>
